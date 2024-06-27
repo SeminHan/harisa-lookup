@@ -31,6 +31,7 @@ use ark_std::{
     rand::{CryptoRng, Rng, RngCore},
     One, UniformRand, Zero,
 };
+use itertools::Itertools;
 use num_bigint::BigInt;
 
 impl<E: Pairing, QAP: R1CSToQAP> Harisa<E, QAP> {
@@ -152,13 +153,24 @@ impl<E: Pairing, QAP: R1CSToQAP> Harisa<E, QAP> {
         let l = hash_to_prime(w_hat.clone(), large_b.clone(), &constants);
 
         let quot = k.clone() / l.clone();
-        let rem = k.clone() % l.clone();
+        let rem = k.clone() - (quot.clone() * l.clone());
+        // let rem = k.clone() % l.clone();
         let q = w_hat.clone().modpow(&quot.clone(), &pp.mod_n.clone());
 
         assert_eq!(
             quot.clone() * l.clone() + rem.clone(),
             k.clone(),
             "Exponentiation Failed"
+        );
+
+        // %%%%%%%%%%%% NON-POKE DEBUG %%%%%%%%%%%%%%%%%
+
+        let w_k = w_hat.clone().modpow(&k.clone(), &pp.mod_n.clone());
+        
+        assert_eq!(
+            w_k.clone(),
+            large_b.clone(),
+            "Non-Poke verification is failed."
         );
 
         let ql = (q.clone().modpow(&l.clone(), &pp.mod_n.clone()));

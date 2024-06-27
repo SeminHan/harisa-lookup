@@ -44,8 +44,13 @@ where
     .unwrap();
 
     // let (cm_u, o_u) = Utils::<E>::pedersen(pp.g.clone(), u.clone(), &mut rng).unwrap();
-
+    
     let accum = tree[0].clone().modpow(&set[0].clone(), &pp.mod_n.clone());
+    
+    // %%%%%%%%%%%%%%%%%%% ACC DEBUG ZONE %%%%%%%%%%%%%%%%%%%%%
+    let set_prod: BigInt = set.clone().iter().product();
+    let tmp_acc = tree[0].clone().modpow(&set_prod.clone(), &pp.mod_n.clone());
+    
 
     // prove: Circuit을 prove 내에 집어넣는 방법
     let proof = Harisa::<E>::generate_harisa_opt_proof(

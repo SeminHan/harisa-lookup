@@ -26,7 +26,7 @@ pub fn prod_set(set: Vec<BigInt>) -> BigInt {
 
 pub fn precompute(g: BigInt, mod_n: BigInt, set: Vec<BigInt>) -> Vec<BigInt> {
     let mut pre_tree = Vec::new();
-    pre_tree.push(g.clone());
+    pre_tree.push((g.clone() % mod_n.clone()));
 
     let mut right_set = set.clone();
     let mut set_size: usize = set.len();
@@ -35,14 +35,18 @@ pub fn precompute(g: BigInt, mod_n: BigInt, set: Vec<BigInt>) -> Vec<BigInt> {
         set_size >>= 1;
         let left_set: Vec<BigInt> = right_set.drain(set_size..).collect();
         let prod_left = prod_set(left_set.clone());
-        let left_res = g.modpow(&prod_left, &mod_n);
+        let left_res = g.modpow(&prod_left, &mod_n.clone());
         let left = precompute(left_res, mod_n.clone(), right_set.clone());
 
         let prod_right = prod_set(right_set);
-        let right_res = g.modpow(&prod_right, &mod_n);
-        let right: Vec<BigInt> = precompute(right_res, mod_n, left_set);
-        pre_tree = [left, right].concat();
+        let right_res = g.modpow(&prod_right, &mod_n.clone());
+        let right: Vec<BigInt> = precompute(right_res, mod_n.clone(), left_set);
+        // pre_tree = [left, right].concat();
+        pre_tree.extend(left);
+        pre_tree.extend(right);
     }
+    
+    
     pre_tree
 }
 
@@ -133,6 +137,10 @@ mod precompute {
 
         let prod_set = prod_set(set.clone());
 
+        for i in 0..pre_tree.len() {
+            println!("[{:?}]-th leaves: {:?}", i, pre_tree[i]);    
+        }
+
         for i in 0..set.len() {
             let expr = prod_set.clone() / set[i].clone();
             assert_eq!(
@@ -142,6 +150,8 @@ mod precompute {
                 i
             );
         }
+
+        
     }
 
     #[test]
