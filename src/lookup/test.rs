@@ -1,22 +1,23 @@
-use std::str::FromStr;
+use std::{str::FromStr, ops::Bound};
 
 use crate::{
     harisa::{
-        arithm::ArithmCircuit, bound::BoundCircuit, harisa::Harisa, type_conversion::bigint_to_fr,
-        hash_to_prime::primality_test
+        arithm::{ArithmCircuit, self}, bound::BoundCircuit, harisa::Harisa, type_conversion::bigint_to_fr,
+        hash_to_prime::primality_test, constants::*
     },
     linker::snark::LinkSnark,
     lookup::{
         constants::PRIME, copy_this_or_that::CTTCircuit, lookup::HarisaPlus,
-        well_transformed::WTCircuit,
+        well_transformed::WTCircuit, self,
     },
 };
 
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, ScalarMul};
 use ark_ff::PrimeField;
 use ark_std::{test_rng, One, Zero,
     rand::{Rng, RngCore, SeedableRng}
 };
+use itertools::Itertools;
 use num_bigint::BigInt;
 // use rand_core::{RngCore, SeedableRng};
 use rand::thread_rng;
@@ -67,12 +68,117 @@ fn lookup_setgen(n: usize, set: Vec<BigInt>) -> (Vec<BigInt>, Vec<BigInt>) {
     (prime_table, z_prime)
 }
 
+
+fn test_lookup_arbit<E: Pairing>(set_size: usize, batch_size: usize) 
+where
+    <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
+{
+    let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
+
+    let (mut table, mut prime_table, mut z_table) = (Vec::new(), Vec::new(), Vec::new());
+
+    table = rand_setgen(set_size.clone(), 8, 16); // Before Transformation
+
+    (prime_table, z_table) = lookup_setgen(set_size.clone(), table.clone()); // \hat{f}, z
+
+    let mut set_table = Vec::new();
+
+    set_table = prime_table.clone();
+    set_table.extend(z_table.clone());
+
+    // Convert p* to BigInt
+    let mut small_prime = Vec::new();
+    for val in ODD_PRIME {
+        small_prime.push(BigInt::from(val));
+    }
+
+    let (mut hat_f, mut z_f) = (Vec::new(), Vec::new());
+    let mut f = Vec::new();
+    for i in 0..batch_size {
+        hat_f.push(prime_table[i].clone());
+        z_f.push(z_table[i].clone());
+        f.push(table[i].clone());
+    }
+    
+    let arithm_circuit = ArithmCircuit::<E::ScalarField>::mock(2 * batch_size.clone());
+    let bound_circuit = BoundCircuit::<E::ScalarField>::mock(2 * batch_size.clone());
+    let ctt_circuit = CTTCircuit::<E::ScalarField>::mock(2 * batch_size.clone(), 2 * batch_size.clone());
+    let wt_circuit = WTCircuit::<E::ScalarField>::mock(batch_size.clone(), batch_size.clone(), batch_size.clone());
+
+    set_table.sort();
+    
+
+    let (pp, tree) = HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_parameters(
+        set_table.clone(),
+        ctt_circuit,
+        wt_circuit,
+        arithm_circuit,
+        bound_circuit,
+        &mut rng,
+        ).unwrap();
+
+    set_table.extend(small_prime.clone());    
+    let mut prod_set: BigInt = set_table.clone().iter().product();
+
+    let accum = tree[0].clone().modpow(&prod_set, &pp.m_pp.mod_n);
+
+    let mut circuit_hat_f: Vec<E::ScalarField> = Vec::new();
+    let mut circuit_f: Vec<E::ScalarField> = Vec::new();
+    let mut circuit_z_f: Vec<E::ScalarField> = Vec::new();
+    
+    for hat_f_i in hat_f.clone() {
+        circuit_hat_f.push(bigint_to_fr(hat_f_i.clone()));
+    }
+
+    for i in 0..batch_size {
+        circuit_f.push(bigint_to_fr(table[i].clone()));
+    }
+
+    for z_i in z_f.clone() {
+        circuit_z_f.push(bigint_to_fr(z_i.clone()));
+    }
+
+    let ctt_elem = [circuit_hat_f.clone(), circuit_z_f.clone()].concat();
+    let ctt_circuit = CTTCircuit::<E::ScalarField>::new(ctt_elem.clone(), ctt_elem.clone());
+    
+    let wt_circuit = WTCircuit::<E::ScalarField>::new(
+        circuit_hat_f.clone(),
+        circuit_f.clone(),
+        circuit_z_f.clone()
+    );
+
+    let proof = HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_proof(
+        pp.clone(),
+        accum.clone(),
+        tree,
+        hat_f,
+        f,
+        z_f,
+        ctt_circuit,
+        wt_circuit,
+        &mut rng
+    ).unwrap();
+
+    assert!(
+        HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::verify_lookup(
+            pp,
+            accum,
+            proof.cm_f_hat,
+            proof.cm_f,
+            proof.cm_z,
+            proof
+        ).unwrap(),
+        "[Harisa+] Verification Failed"
+    );
+}
+
 fn test_lookup<E: Pairing>(l_size: usize)
 where
     <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
 {
-    let mut set_hat = Vec::new();
-    for p_i in PRIME.clone() {
+    // %%%%%%%%%%%%%%%%%%%%%%% Existing %%%%%%%%%%%%%%%%%%%%%%%
+    let mut set_hat = Vec::new(); // \hat_t
+    for p_i in ODD_PRIME.clone() {
         set_hat.push(BigInt::from(p_i));
     }
 
@@ -83,13 +189,13 @@ where
         let f_i = s_i.clone() / 2_i128.pow(14);
         let z_i = s_i % 2_i128.pow(14);
 
-        set.push(f_i);
-        z.push(z_i);
+        set.push(f_i); // 원래(소수가 아닌) table
+        z.push(z_i); // 전체 z에 대한 set
     }
 
-    let mut f_hat = Vec::new();
-    let mut f = Vec::new();
-    let mut z_f = Vec::new();
+    let mut f_hat = Vec::new(); // \hat_f
+    let mut f = Vec::new(); // f
+    let mut z_f = Vec::new(); // z 중 \hat_f(lookup element와 mapping되는) z들
     for i in 0..l_size {
         f_hat.push(set_hat[i].clone());
         f.push(set[i].clone());
@@ -122,16 +228,16 @@ where
 
     let accum = tree[0].clone().modpow(&sorted_set[0], &pp.m_pp.mod_n);
 
-    let mut circuit_set_hat: Vec<E::ScalarField> = Vec::new();
+    // let mut circuit_set_hat: Vec<E::ScalarField> = Vec::new();
     let mut circuit_set: Vec<E::ScalarField> = Vec::new();
     let mut circuit_z: Vec<E::ScalarField> = Vec::new();
     let mut circuit_f_hat: Vec<E::ScalarField> = Vec::new();
     let mut circuit_f: Vec<E::ScalarField> = Vec::new();
     let mut circuit_z_f: Vec<E::ScalarField> = Vec::new();
 
-    for s_hat_i in set.clone() {
-        circuit_set_hat.push(bigint_to_fr(s_hat_i));
-    }
+    // for s_hat_i in set_hat.clone() {
+    //     circuit_set_hat.push(bigint_to_fr(s_hat_i)); // 
+    // }
 
     for s_i in set.clone() {
         circuit_set.push(bigint_to_fr(s_i));
@@ -202,15 +308,22 @@ fn test_lookup_bn254() {
 }
 
 #[test]
+fn test_lookup_bench() {
+    use ark_bn254::{Bn254, Fr as F};
+
+    test_lookup_arbit::<Bn254>(50, 16);
+}
+
+#[test]
 fn test_lookup_gen() {
     let mut table = Vec::new();
     let mut prime_table = Vec::new();
     let mut z_table = Vec::new();
     
-    let set_size = 10;
-    let low = 8;
-    let high = 16;
-    table = rand_setgen(set_size.clone(), low.clone(), high.clone());
+    let set_size = 10; // N(Table size)
+    let low = 8; // Random set element range from 2^low
+    let high = 16; // Random set element range to 2^high
+    table = rand_setgen(set_size.clone(), low.clone(), high.clone()); // Berfore transformation
     
     (prime_table, z_table) = lookup_setgen(set_size.clone(), table.clone());
 
@@ -232,3 +345,4 @@ fn test_lookup_gen() {
 }
 
 // cargo test -r --package harisa-rs --features "parallel print-trace" --lib -- lookup::test::test_lookup_bn254 --exact --show-output
+// default --> weight: ease circuit overhead
