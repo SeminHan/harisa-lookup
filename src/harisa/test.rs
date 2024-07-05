@@ -89,7 +89,7 @@ where
         u.clone(),
         o_u.clone(),
         &mut rng,
-        non_proven_elem
+        false
     )
     .unwrap();
 

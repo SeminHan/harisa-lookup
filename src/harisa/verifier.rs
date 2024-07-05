@@ -73,8 +73,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
             proof.arithm_lnk_cm_aux,
         );
 
-        let bound_instance =
-            LNK::generate_instance(vec![proof.cm_u], proof.bound_lnk_cm, proof.bound_lnk_cm_aux);
+        
 
         let arithm_pvk = prepare_verifying_key(&pp.arithm_vk.clone());
         let arithm_verify = start_timer!(|| "cparithm::verify");
@@ -88,23 +87,27 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         );
         end_timer!(arithm_verify);
 
-        let bound_pvk = prepare_verifying_key(&pp.bound_vk.clone());
-        let bound_verify = start_timer!(|| "cpbound::verify");
-        let bound_result =
-            CcGroth16::<E, QAP>::verify_proof(&bound_pvk, &proof.bound_prf, &[]).unwrap();
-        let bound_link_result = LNK::verify(
-            &pp.bound_lnk_pp,
-            &pp.bound_lnk_vk,
-            &bound_instance,
-            &proof.bound_lnk_prf,
-        );
-        end_timer!(bound_verify);
+        // %%%%%%%%%%%%%%%%%%%%%%%%%%% Remove Bound Circuit %%%%%%%%%%%%%%%%%%%%%%%%%%%
+        // let bound_instance =
+        //     LNK::generate_instance(vec![proof.cm_u], proof.bound_lnk_cm, proof.bound_lnk_cm_aux);
+
+        // let bound_pvk = prepare_verifying_key(&pp.bound_vk.clone());
+        // let bound_verify = start_timer!(|| "cpbound::verify");
+        // let bound_result =
+        //     CcGroth16::<E, QAP>::verify_proof(&bound_pvk, &proof.bound_prf, &[]).unwrap();
+        // let bound_link_result = LNK::verify(
+        //     &pp.bound_lnk_pp,
+        //     &pp.bound_lnk_vk,
+        //     &bound_instance,
+        //     &proof.bound_lnk_prf,
+        // );
+        // end_timer!(bound_verify);
         end_timer!(harisa_verifier);
 
         assert_eq!(arithm_result, true, "[Arithm] Verification Failed");
         assert_eq!(arithm_link_result, true, "[Arithm] Linker Failed");
-        assert_eq!(bound_result, true, "[Bound] Verification Failed");
-        assert_eq!(bound_link_result, true, "[Bound] Linker Failed");
+        // assert_eq!(bound_result, true, "[Bound] Verification Failed");
+        // assert_eq!(bound_link_result, true, "[Bound] Linker Failed");
 
         Ok(true)
     }

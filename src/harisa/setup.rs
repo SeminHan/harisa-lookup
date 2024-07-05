@@ -86,6 +86,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         .unwrap();
         end_timer!(arithm_generation);
 
+        // %%%%%%%%%%%%%%%%%%%%%%%%%%% Remove Bound Circuit %%%%%%%%%%%%%%%%%%%%%%%%%%%
         let bound_generation = start_timer!(|| "bound::generator");
         let (bound_ek, bound_vk) = Self::generate_cc_snark_parameters(bound_circuit, rng).unwrap();
 

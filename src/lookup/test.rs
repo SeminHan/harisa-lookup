@@ -348,7 +348,7 @@ where
 //     );
 // }
 
-const SET_SIZE: usize = 16;
+const SET_SIZE: usize = 16; 
 
 #[test]
 fn test_lookup_bn254() {
@@ -397,4 +397,5 @@ fn test_lookup_gen() {
 }
 
 // cargo test -r --package harisa-rs --features "parallel print-trace" --lib -- lookup::test::test_lookup_bn254 --exact --show-output
+// cargo test -r --package harisa-rs --features "parallel print-trace" --lib -- lookup::test::test_lookup_bench --exact --show-output
 // default --> weight: ease circuit overhead

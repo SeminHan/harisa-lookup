@@ -52,12 +52,12 @@ impl<E: Pairing, LNK: Linker<E>> Membership<E, LNK> for Harisa<E, LNK> {
         u: Vec<BigInt>,
         o_u: E::ScalarField,
         rng: &mut R,
-        non_proven_elem: Vec<BigInt>
+        is_lookup: bool
     ) -> Result<Self::Proof, Error>
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
     {
-        let proof = Self::generate_harisa_opt_proof(pp, tree, accum, cm_u, u, o_u, rng, non_proven_elem).unwrap();
+        let proof = Self::generate_harisa_opt_proof(pp, tree, accum, cm_u, u, o_u, rng, is_lookup).unwrap();
 
         Ok(proof)
     }

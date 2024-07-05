@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, default};
 
 use super::{
     arithm::ArithmCircuit,
@@ -34,6 +34,12 @@ use ark_std::{
 };
 use num_bigint::BigInt;
 use num_traits::Pow;
+use tracing::dispatcher::get_default;
+
+enum ReturnProofType {
+    HarisaProof, 
+    HarisaLookupProof,
+}
 
 impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
     fn generate_link_proof<R>(
@@ -158,19 +164,6 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         // let rem = k.clone() % l.clone();
         let q = w_hat.clone().modpow(&quot.clone(), &pp.mod_n.clone());
 
-
-        assert_eq!(
-            w_hat.modpow(&k.clone(), &pp.mod_n.clone()),
-            large_b.clone(),
-            "FAILED"
-        );
-
-        assert_eq!(
-            (q.clone().modpow(&l.clone(), &pp.mod_n.clone()) * w_hat.modpow(&rem.clone(), &pp.mod_n.clone())) % pp.mod_n.clone(),
-            large_b,
-            "PoKE Proof Generation Failed"
-        );
-
         end_timer!(poke_prove);
 
         let mut circuit_u = Vec::new();
@@ -236,31 +229,34 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         .unwrap();
         end_timer!(arithm_prove);
 
+        // let bound_prove = start_timer!(|| "cpbound::prove");
+        // let bound_circuit =
+        //     // BoundCircuit::<E::ScalarField>::new(small_prime, circuit_u.clone());
+        //     BoundCircuit::<E::ScalarField>::new(E::ScalarField::one(), circuit_u.clone());
+        // let bound_prf = Self::generate_cc_proof(&pp.bound_ek.clone(), bound_circuit, rng).unwrap();
+    
+        // let bound_witness = [vec![bound_prf.open], circuit_u.clone()].concat();
+    
+        // let mut bound_ck = pp.bound_ek.ck.clone();
+    
+        // bound_ck.truncate(u.clone().len() + 1);
+    
+        // let bound_lnk_cm = inner_product::<E>(bound_witness.as_slice(), bound_ck.as_slice());
+    
+        // let (bound_lnk_prf, bound_lnk_cm_aux) = Self::generate_link_proof(
+        //         pp.bound_lnk_pp.clone(),
+        //         pp.bound_lnk_ek.clone(),
+        //         vec![o_u],
+        //         circuit_u.clone(),
+        //         vec![bound_prf.open],
+        //         rng,
+        // )
+        // .unwrap();
+        // end_timer!(bound_prove);
+        
+        // %%%%%%%%%%%%%%%%%%%%%%%%%%% Remove Bound Circuit %%%%%%%%%%%%%%%%%%%%%%%%%%%
         // bound => prf3
-        let bound_prove = start_timer!(|| "cpbound::prove");
-        let bound_circuit =
-            // BoundCircuit::<E::ScalarField>::new(small_prime, circuit_u.clone());
-            BoundCircuit::<E::ScalarField>::new(E::ScalarField::one(), circuit_u.clone());
-        let bound_prf = Self::generate_cc_proof(&pp.bound_ek.clone(), bound_circuit, rng).unwrap();
-
-        let bound_witness = [vec![bound_prf.open], circuit_u.clone()].concat();
-
-        let mut bound_ck = pp.bound_ek.ck.clone();
-
-        bound_ck.truncate(u.clone().len() + 1);
-
-        let bound_lnk_cm = inner_product::<E>(bound_witness.as_slice(), bound_ck.as_slice());
-
-        let (bound_lnk_prf, bound_lnk_cm_aux) = Self::generate_link_proof(
-            pp.bound_lnk_pp.clone(),
-            pp.bound_lnk_ek.clone(),
-            vec![o_u],
-            circuit_u.clone(),
-            vec![bound_prf.open],
-            rng,
-        )
-        .unwrap();
-        end_timer!(bound_prove);
+       
         end_timer!(harisa_prover);
 
         Ok(HarisaProof {
@@ -271,13 +267,13 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
             q,
             k: rem,
             arithm_prf,
-            bound_prf,
             arithm_lnk_prf,
-            bound_lnk_prf,
             arithm_lnk_cm,
-            bound_lnk_cm,
             arithm_lnk_cm_aux,
-            bound_lnk_cm_aux,
+            // bound_prf,
+            // bound_lnk_prf,
+            // bound_lnk_cm,
+            // bound_lnk_cm_aux,
         })
     }
 
@@ -289,7 +285,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         u: Vec<BigInt>,
         o_u: E::ScalarField,
         rng: &mut R,
-        non_proven_elem: Vec<BigInt>
+        is_lookup: bool
     ) -> Result<HarisaProof<E, LNK>, SynthesisError>
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
@@ -323,38 +319,12 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         }
 
         let w_u = w.first().unwrap();
-
-        // let tmp_w: BigInt = pp.g.clone().modpow(&non_proven_elem.clone().iter().product(), &pp.mod_n);
-        // assert_eq!(
-        //     tmp_w.clone(),
-        //     w_u.clone(),
-        //     "W hat generation Failed(Not affected by an Accumlator)"
-        // );
-        let mut tmp_set: Vec<BigInt> = [u.clone(), non_proven_elem.clone()].concat();
-        let tmp_prod_set: BigInt = tmp_set.clone().iter().product();
-        assert_eq!(
-            pp.g.clone().modpow(&tmp_prod_set, &pp.mod_n.clone()),
-            accum.clone(),
-            "Accumulator Check Failed"
-        );
-
-        let mut tmp_w_exp: BigInt  = non_proven_elem.clone().iter().product();
-        assert_eq!(
-            pp.g.clone().modpow(&tmp_w_exp.clone(), &pp.mod_n.clone()),
-            w_u.clone(),
-            "W Generation Failed(Assemble)"
-        );
-
-        assert_eq!(
-            w_u.clone().modpow(&u.clone().iter().product(), &pp.mod_n),
-            accum.clone(),
-            "W Generation Failed"
-        );
+        
         
         let proof = Self::generate_harisa_proof(pp, accum, w_u.clone(), cm_u, u, o_u, rng).unwrap();
-        // let mut prod_non_elem = non_proven_elem.clone().iter().product();
-        // let tmp_w_u = pp.g.clone().modpow(&prod_non_elem, &pp.mod_n.clone());
-        // let proof = Self::generate_harisa_proof(pp, accum, tmp_w_u.clone(), cm_u, u, o_u, rng).unwrap();
+        
         Ok(proof)
+        
+    
     }
 }

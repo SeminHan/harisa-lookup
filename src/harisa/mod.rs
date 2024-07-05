@@ -52,7 +52,7 @@ pub trait Membership<E: Pairing, LNK: Linker<E>> {
         u: Vec<BigInt>,
         o_u: E::ScalarField,
         rng: &mut R,
-        non_proven_elem: Vec<BigInt>
+        is_lookup: bool
     ) -> Result<Self::Proof, Error>
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug;
