@@ -57,6 +57,7 @@ pub trait Lookup<E: Pairing, M: Membership<E, LNK>, LNK: Linker<E>> {
         ctt_circuit: Option<CTT>,
         wt_circuit: Option<WT>,
         rng: &mut R,
+        non_proven_elem: Vec<BigInt>
     ) -> Result<Self::Proof, Error>
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug;

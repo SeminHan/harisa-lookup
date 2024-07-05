@@ -33,6 +33,7 @@ use ark_std::{
     One, UniformRand, Zero,
 };
 use num_bigint::BigInt;
+use num_traits::Pow;
 
 impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
     fn generate_link_proof<R>(
@@ -92,17 +93,16 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         for i in 0..ODD_PRIME.len() {
             let p_i = BigInt::from(ODD_PRIME[i]);
             p.push(p_i.clone());
-            p_star *= p_i;
         }
-
+    
+        let prod_p: BigInt = p.iter().product();
         // accum_hat
-        let accum_hat = accum.clone().modpow(&p_star, &pp.mod_n.clone());
+        let accum_hat = accum.clone().modpow(&prod_p, &pp.mod_n.clone());
+        
 
         // ustar
-        let mut u_star = BigInt::one();
-        for u_i in u.clone() {
-            u_star *= u_i;
-        }
+        let mut u_star = BigInt::default();
+        u_star = u.iter().product();
 
         // sample b
         let b_rand = E::ScalarField::rand(rng);
@@ -129,7 +129,9 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         let w_hat = w.modpow(&s_bar, &pp.mod_n.clone());
 
         // sample r
-        let r_rand = gen_bigint_range(rng, &BigInt::from(2), &(pp.mod_n.clone() - 1));
+        let base_2: BigInt = BigInt::from(2);
+        let r_len: u16 = 256;
+        let r_rand = gen_bigint_range(rng, &BigInt::from(2), &base_2.pow(r_len));
 
         // calculate R
         let r = w_hat.clone().modpow(&r_rand.clone(), &pp.mod_n.clone());
@@ -152,8 +154,22 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         let l = hash_to_prime(w_hat.clone(), large_b.clone(), &constants);
 
         let quot = k.clone() / l.clone();
-        let rem = k.clone() % l.clone();
+        let rem = k.clone() - quot.clone() * l.clone();
+        // let rem = k.clone() % l.clone();
         let q = w_hat.clone().modpow(&quot.clone(), &pp.mod_n.clone());
+
+
+        assert_eq!(
+            w_hat.modpow(&k.clone(), &pp.mod_n.clone()),
+            large_b.clone(),
+            "FAILED"
+        );
+
+        assert_eq!(
+            (q.clone().modpow(&l.clone(), &pp.mod_n.clone()) * w_hat.modpow(&rem.clone(), &pp.mod_n.clone())) % pp.mod_n.clone(),
+            large_b,
+            "PoKE Proof Generation Failed"
+        );
 
         end_timer!(poke_prove);
 
@@ -273,6 +289,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         u: Vec<BigInt>,
         o_u: E::ScalarField,
         rng: &mut R,
+        non_proven_elem: Vec<BigInt>
     ) -> Result<HarisaProof<E, LNK>, SynthesisError>
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
@@ -307,8 +324,37 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
 
         let w_u = w.first().unwrap();
 
-        let proof = Self::generate_harisa_proof(pp, accum, w_u.clone(), cm_u, u, o_u, rng).unwrap();
+        // let tmp_w: BigInt = pp.g.clone().modpow(&non_proven_elem.clone().iter().product(), &pp.mod_n);
+        // assert_eq!(
+        //     tmp_w.clone(),
+        //     w_u.clone(),
+        //     "W hat generation Failed(Not affected by an Accumlator)"
+        // );
+        let mut tmp_set: Vec<BigInt> = [u.clone(), non_proven_elem.clone()].concat();
+        let tmp_prod_set: BigInt = tmp_set.clone().iter().product();
+        assert_eq!(
+            pp.g.clone().modpow(&tmp_prod_set, &pp.mod_n.clone()),
+            accum.clone(),
+            "Accumulator Check Failed"
+        );
 
+        let mut tmp_w_exp: BigInt  = non_proven_elem.clone().iter().product();
+        assert_eq!(
+            pp.g.clone().modpow(&tmp_w_exp.clone(), &pp.mod_n.clone()),
+            w_u.clone(),
+            "W Generation Failed(Assemble)"
+        );
+
+        assert_eq!(
+            w_u.clone().modpow(&u.clone().iter().product(), &pp.mod_n),
+            accum.clone(),
+            "W Generation Failed"
+        );
+        
+        let proof = Self::generate_harisa_proof(pp, accum, w_u.clone(), cm_u, u, o_u, rng).unwrap();
+        // let mut prod_non_elem = non_proven_elem.clone().iter().product();
+        // let tmp_w_u = pp.g.clone().modpow(&prod_non_elem, &pp.mod_n.clone());
+        // let proof = Self::generate_harisa_proof(pp, accum, tmp_w_u.clone(), cm_u, u, o_u, rng).unwrap();
         Ok(proof)
     }
 }

@@ -76,6 +76,7 @@ impl<E: Pairing, M: Membership<E, LNK>, LNK: Linker<E>> Lookup<E, M, LNK>
         ctt_circuit: Option<CTT>,
         wt_circuit: Option<WT>,
         rng: &mut R,
+        non_proven_elem: Vec<BigInt>
     ) -> Result<Self::Proof, Error>
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
@@ -90,6 +91,7 @@ impl<E: Pairing, M: Membership<E, LNK>, LNK: Linker<E>> Lookup<E, M, LNK>
             ctt_circuit.unwrap(),
             wt_circuit.unwrap(),
             rng,
+            non_proven_elem
         )
         .unwrap();
 

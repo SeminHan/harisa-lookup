@@ -131,7 +131,7 @@ mod precompute {
 
         let pre_tree = precompute(g.clone(), mod_n.clone(), set.clone());
 
-        let prod_set = prod_set(set.clone());
+        let prod_set: BigInt = set.clone().iter().product();
 
         for i in 0..set.len() {
             let expr = prod_set.clone() / set[i].clone();
@@ -146,7 +146,7 @@ mod precompute {
 
     #[test]
     fn test_precompute_bn254() {
-        test_precompute(8)
+        test_precompute(16)
     }
 
     #[test]

@@ -38,9 +38,8 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         for i in 0..ODD_PRIME.len() {
             let p_i = BigInt::from(ODD_PRIME[i]);
             p.push(p_i.clone());
-            p_star *= p_i;
         }
-
+        p_star = p.clone().iter().product();
         let accum_hat = accum.clone().modpow(&p_star, &pp.mod_n.clone());
 
         // hash h
@@ -56,6 +55,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
 
         assert!(proof.k.clone() >= BigInt::from(0), "[PoKE] Wrong range (k)");
         assert!(proof.k.clone() < l.clone(), "[PoKE] Wrong range (k)");
+
 
         // PoKE verify
         assert_eq!(

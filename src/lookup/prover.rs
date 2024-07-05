@@ -76,6 +76,7 @@ where
         ctt_circuit: CTT,
         wt_circuit: WT,
         rng: &mut R,
+        non_proven_elem: Vec::<BigInt>
     ) -> Result<LookupProof<E, M, LNK>, SynthesisError>
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
@@ -165,6 +166,7 @@ where
             harisa_elem,
             o_f_prime,
             rng,
+            non_proven_elem.clone()
         )
         .unwrap();
 

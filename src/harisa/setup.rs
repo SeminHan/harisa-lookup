@@ -104,7 +104,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         let (g, mod_n) = rsa_setup();
 
         let preprocessing = start_timer!(|| "HARiSA::Preprocess");
-        let table = precompute(g.clone(), mod_n.clone(), set);
+        let tree = precompute(g.clone(), mod_n.clone(), set);
         end_timer!(preprocessing);
 
         Ok((
@@ -123,7 +123,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
                 mod_n: mod_n.clone(),
                 ck: ck.clone(),
             },
-            table,
+            tree,
             ck,
         ))
     }

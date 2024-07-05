@@ -35,6 +35,11 @@ where
         u.push(set[i].clone());
     }
 
+    let mut non_proven_elem = Vec::new();
+    for i in l_size..set.len() {
+        non_proven_elem.push(set[i].clone());
+    }
+
     let arithm_circuit = ArithmCircuit::<E::ScalarField>::mock(l_size);
     let bound_circuit = BoundCircuit::<E::ScalarField>::mock(l_size);
 
@@ -48,6 +53,12 @@ where
     .unwrap();
 
     let accum = tree[0].clone().modpow(&set[0].clone(), &pp.mod_n.clone());
+    
+    assert_eq!(
+        set[0].clone(),
+        set.clone().iter().product(),
+        "Set Accumulation Failed"
+    );
 
     let mut u_scalar: Vec<E::ScalarField> = Vec::new();
     for u_i in u.clone() {
@@ -67,6 +78,8 @@ where
         cm_u = (cm_u + *g_i * u_i).into();
     }
 
+    
+
     // prove
     let proof = Harisa::<E, LNK>::generate_harisa_opt_proof(
         pp.clone(),
@@ -76,6 +89,7 @@ where
         u.clone(),
         o_u.clone(),
         &mut rng,
+        non_proven_elem
     )
     .unwrap();
 

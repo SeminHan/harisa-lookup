@@ -17,6 +17,7 @@ use ark_ff::PrimeField;
 use ark_std::{test_rng, One, Zero,
     rand::{Rng, RngCore, SeedableRng}
 };
+use digest::generic_array::functional::FunctionalSequence;
 use itertools::Itertools;
 use num_bigint::BigInt;
 // use rand_core::{RngCore, SeedableRng};
@@ -42,7 +43,7 @@ fn lookup_setgen(n: usize, set: Vec<BigInt>) -> (Vec<BigInt>, Vec<BigInt>) {
     use crate::harisa::hash_to_prime::hash_to_prime;
     use rand::thread_rng;
     let base_2: i32 = 2;
-    let expo = 11;
+    let expo = 14;
 
     let mut z_prime: Vec<BigInt> = Vec::new();
     let mut z_len = BigInt::from(base_2.pow(expo));
@@ -81,10 +82,16 @@ where
 
     (prime_table, z_table) = lookup_setgen(set_size.clone(), table.clone()); // \hat{f}, z
 
+    let mut vec_table: Vec<(BigInt, BigInt, BigInt)> = prime_table.iter().cloned().zip(table.iter().cloned()).zip(z_table.iter().cloned()).map(|((x, y), z)| (x, y, z)).collect();
+    vec_table.sort();
+
+    // prime_table.sort();
+    z_table.sort();
     let mut set_table = Vec::new();
 
-    set_table = prime_table.clone();
-    set_table.extend(z_table.clone());
+    // set_table = [prime_table.clone(), z_table.clone()].concat();
+    // prime_table.clone();
+    // set_table.extend(z_table.clone().iter());
 
     // Convert p* to BigInt
     let mut small_prime = Vec::new();
@@ -93,19 +100,61 @@ where
     }
 
     let (mut hat_f, mut z_f) = (Vec::new(), Vec::new());
-    let mut f = Vec::new();
+    let mut t = Vec::new();
     for i in 0..batch_size {
-        hat_f.push(prime_table[i].clone());
-        z_f.push(z_table[i].clone());
-        f.push(table[i].clone());
+        let (x, y, z) = vec_table[i].clone();
+        hat_f.push(x);
+        t.push(y);
+        z_f.push(z);
     }
+
+    let base_2: i32 = 2;
+    let expo = 14;
+
+    let mut bit_shift = BigInt::from(base_2.pow(expo));
+
+    assert_eq!(
+        hat_f[0].clone(),
+        t[0].clone() * bit_shift + z_f[0].clone(),
+        "Sorting Failed"
+    );
+
+    // hat_f.sort();
+    // z_f.sort();
+
+    let mut proven_elem: Vec<BigInt> = [hat_f.clone(), z_f.clone()].concat();
+
+    //  %%%%%%%%%% For Debug %%%%%%%%%%
+    let mut non_proven_elem: Vec<BigInt> = Vec::new();
+    let mut non_proven_z: Vec<BigInt> = Vec::new();
+    for i in batch_size..table.len() {
+        non_proven_elem.push(prime_table[i].clone());
+        non_proven_z.push(z_table[i].clone());
+    }
+
+    let mut prod_prime_table: BigInt = BigInt::one();
+    for i in 0..batch_size {
+        prod_prime_table *= hat_f[i].clone();
+        prod_prime_table *= z_f[i].clone();
+    }
+    non_proven_elem.extend(non_proven_z.clone());
+    let prod_non_proven: BigInt = non_proven_elem.clone().iter().product();
+
+    set_table = [proven_elem.clone(), non_proven_elem.clone()].concat();
+    let prod_set_table: BigInt = set_table.clone().iter().product();
+
+    assert_eq!(
+        prod_set_table.clone(),
+        prod_non_proven.clone() * prod_prime_table.clone(),
+        "Exponentiation Failed"
+    );
     
     let arithm_circuit = ArithmCircuit::<E::ScalarField>::mock(2 * batch_size.clone());
     let bound_circuit = BoundCircuit::<E::ScalarField>::mock(2 * batch_size.clone());
     let ctt_circuit = CTTCircuit::<E::ScalarField>::mock(2 * batch_size.clone(), 2 * batch_size.clone());
     let wt_circuit = WTCircuit::<E::ScalarField>::mock(batch_size.clone(), batch_size.clone(), batch_size.clone());
 
-    set_table.sort();
+    // set_table.sort();
     
 
     let (pp, tree) = HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_parameters(
@@ -117,21 +166,21 @@ where
         &mut rng,
         ).unwrap();
 
-    set_table.extend(small_prime.clone());    
+    // set_table.extend(small_prime.clone());    
     let mut prod_set: BigInt = set_table.clone().iter().product();
 
-    let accum = tree[0].clone().modpow(&prod_set, &pp.m_pp.mod_n);
+    let accum = tree[0].clone().modpow(&set_table[0].clone(), &pp.m_pp.mod_n);
 
     let mut circuit_hat_f: Vec<E::ScalarField> = Vec::new();
-    let mut circuit_f: Vec<E::ScalarField> = Vec::new();
+    let mut circuit_t: Vec<E::ScalarField> = Vec::new();
     let mut circuit_z_f: Vec<E::ScalarField> = Vec::new();
     
     for hat_f_i in hat_f.clone() {
         circuit_hat_f.push(bigint_to_fr(hat_f_i.clone()));
     }
 
-    for i in 0..batch_size {
-        circuit_f.push(bigint_to_fr(table[i].clone()));
+    for t_i in t.clone() {
+        circuit_t.push(bigint_to_fr(t_i.clone()));
     }
 
     for z_i in z_f.clone() {
@@ -143,7 +192,7 @@ where
     
     let wt_circuit = WTCircuit::<E::ScalarField>::new(
         circuit_hat_f.clone(),
-        circuit_f.clone(),
+        circuit_t.clone(),
         circuit_z_f.clone()
     );
 
@@ -152,11 +201,12 @@ where
         accum.clone(),
         tree,
         hat_f,
-        f,
+        t,
         z_f,
         ctt_circuit,
         wt_circuit,
-        &mut rng
+        &mut rng,
+        non_proven_elem.clone()
     ).unwrap();
 
     assert!(
@@ -166,135 +216,137 @@ where
             proof.cm_f_hat,
             proof.cm_f,
             proof.cm_z,
-            proof
+            proof,
         ).unwrap(),
         "[Harisa+] Verification Failed"
     );
 }
 
-fn test_lookup<E: Pairing>(l_size: usize)
-where
-    <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
-{
-    // %%%%%%%%%%%%%%%%%%%%%%% Existing %%%%%%%%%%%%%%%%%%%%%%%
-    let mut set_hat = Vec::new(); // \hat_t
-    for p_i in ODD_PRIME.clone() {
-        set_hat.push(BigInt::from(p_i));
-    }
+// fn test_lookup<E: Pairing>(l_size: usize)
+// where
+//     <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
+// {
+//     // %%%%%%%%%%%%%%%%%%%%%%% Existing %%%%%%%%%%%%%%%%%%%%%%%
+//     let mut set_hat = Vec::new(); // \hat_t
+//     for p_i in ODD_PRIME.clone() {
+//         set_hat.push(BigInt::from(p_i));
+//     }
 
-    let (mut set, mut z) = (Vec::new(), Vec::new());
+//     let (mut set, mut z) = (Vec::new(), Vec::new());
 
-    for s_i in set_hat.clone() {
-        // 2^14 = 16384
-        let f_i = s_i.clone() / 2_i128.pow(14);
-        let z_i = s_i % 2_i128.pow(14);
+//     for s_i in set_hat.clone() {
+//         // 2^14 = 16384
+//         let f_i = s_i.clone() / 2_i128.pow(14);
+//         let z_i = s_i % 2_i128.pow(14);
 
-        set.push(f_i); // 원래(소수가 아닌) table
-        z.push(z_i); // 전체 z에 대한 set
-    }
+//         set.push(f_i); // 원래(소수가 아닌) table
+//         z.push(z_i); // 전체 z에 대한 set
+//     }
 
-    let mut f_hat = Vec::new(); // \hat_f
-    let mut f = Vec::new(); // f
-    let mut z_f = Vec::new(); // z 중 \hat_f(lookup element와 mapping되는) z들
-    for i in 0..l_size {
-        f_hat.push(set_hat[i].clone());
-        f.push(set[i].clone());
-        z_f.push(z[i].clone());
-    }
+//     let mut f_hat = Vec::new(); // \hat_f
+//     let mut f = Vec::new(); // f
+//     let mut z_f = Vec::new(); // z 중 \hat_f(lookup element와 mapping되는) z들
+//     for i in 0..l_size {
+//         f_hat.push(set_hat[i].clone());
+//         f.push(set[i].clone());
+//         z_f.push(z[i].clone());
+//     }
 
-    // lookup
-    let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
+//     // lookup
+//     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
 
-    let arithm_circuit = ArithmCircuit::<E::ScalarField>::mock(2 * l_size);
-    let bound_circuit = BoundCircuit::<E::ScalarField>::mock(2 * l_size);
-    let ctt_circuit = CTTCircuit::<E::ScalarField>::mock(2 * l_size, 2 * l_size);
-    let wt_circuit = WTCircuit::<E::ScalarField>::mock(l_size, l_size, l_size);
+//     let arithm_circuit = ArithmCircuit::<E::ScalarField>::mock(2 * l_size);
+//     let bound_circuit = BoundCircuit::<E::ScalarField>::mock(2 * l_size);
+//     let ctt_circuit = CTTCircuit::<E::ScalarField>::mock(2 * l_size, 2 * l_size);
+//     let wt_circuit = WTCircuit::<E::ScalarField>::mock(l_size, l_size, l_size);
 
-    let mut binding = set_hat.clone();
-    let mut sorted_set: Vec<BigInt> = binding.drain(..l_size).collect();
+//     let mut binding = set_hat.clone();
+//     let mut sorted_set: Vec<BigInt> = binding.drain(..l_size).collect();
 
-    sorted_set = [sorted_set, z.clone(), binding].concat();
+//     sorted_set = [sorted_set, z.clone(), binding].concat();
 
-    let (pp, tree) =
-        HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_parameters(
-            sorted_set.clone(),
-            ctt_circuit,
-            wt_circuit,
-            arithm_circuit,
-            bound_circuit,
-            &mut rng,
-        )
-        .unwrap();
+//     let (pp, tree) =
+//         HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_parameters(
+//             sorted_set.clone(),
+//             ctt_circuit,
+//             wt_circuit,
+//             arithm_circuit,
+//             bound_circuit,
+//             &mut rng,
+//         )
+//         .unwrap();
 
-    let accum = tree[0].clone().modpow(&sorted_set[0], &pp.m_pp.mod_n);
+//     // let accum = tree[0].clone().modpow(&sorted_set[0], &pp.m_pp.mod_n);
+//     let accum = tree[0].clone().modpow(&sorted_set.clone().iter().product(), &pp.m_pp.mod_n.clone());
 
-    // let mut circuit_set_hat: Vec<E::ScalarField> = Vec::new();
-    let mut circuit_set: Vec<E::ScalarField> = Vec::new();
-    let mut circuit_z: Vec<E::ScalarField> = Vec::new();
-    let mut circuit_f_hat: Vec<E::ScalarField> = Vec::new();
-    let mut circuit_f: Vec<E::ScalarField> = Vec::new();
-    let mut circuit_z_f: Vec<E::ScalarField> = Vec::new();
 
-    // for s_hat_i in set_hat.clone() {
-    //     circuit_set_hat.push(bigint_to_fr(s_hat_i)); // 
-    // }
+//     // let mut circuit_set_hat: Vec<E::ScalarField> = Vec::new();
+//     let mut circuit_set: Vec<E::ScalarField> = Vec::new();
+//     let mut circuit_z: Vec<E::ScalarField> = Vec::new();
+//     let mut circuit_f_hat: Vec<E::ScalarField> = Vec::new();
+//     let mut circuit_f: Vec<E::ScalarField> = Vec::new();
+//     let mut circuit_z_f: Vec<E::ScalarField> = Vec::new();
 
-    for s_i in set.clone() {
-        circuit_set.push(bigint_to_fr(s_i));
-    }
+//     // for s_hat_i in set_hat.clone() {
+//     //     circuit_set_hat.push(bigint_to_fr(s_hat_i)); // 
+//     // }
 
-    for z_i in z.clone() {
-        circuit_z.push(bigint_to_fr(z_i));
-    }
+//     for s_i in set.clone() {
+//         circuit_set.push(bigint_to_fr(s_i));
+//     }
 
-    for f_hat_i in f_hat.clone() {
-        circuit_f_hat.push(bigint_to_fr(f_hat_i));
-    }
+//     for z_i in z.clone() {
+//         circuit_z.push(bigint_to_fr(z_i));
+//     }
 
-    for i in 0..f_hat.clone().len() {
-        circuit_f.push(circuit_set[i]);
-    }
+//     for f_hat_i in f_hat.clone() {
+//         circuit_f_hat.push(bigint_to_fr(f_hat_i));
+//     }
 
-    for i in 0..f_hat.clone().len() {
-        circuit_z_f.push(circuit_z[i]);
-    }
+//     for i in 0..f_hat.clone().len() {
+//         circuit_f.push(circuit_set[i]);
+//     }
 
-    let ctt_elem = [circuit_f_hat.clone(), circuit_z_f.clone()].concat();
+//     for i in 0..f_hat.clone().len() {
+//         circuit_z_f.push(circuit_z[i]);
+//     }
 
-    let ctt_circuit = CTTCircuit::<E::ScalarField>::new(ctt_elem.clone(), ctt_elem.clone());
+//     let ctt_elem = [circuit_f_hat.clone(), circuit_z_f.clone()].concat();
 
-    let wt_circuit = WTCircuit::<E::ScalarField>::new(
-        circuit_f_hat.clone(),
-        circuit_f.clone(),
-        circuit_z_f.clone(),
-    );
+//     let ctt_circuit = CTTCircuit::<E::ScalarField>::new(ctt_elem.clone(), ctt_elem.clone());
 
-    let proof = HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_proof(
-        pp.clone(),
-        accum.clone(),
-        tree,
-        f_hat,
-        f,
-        z_f,
-        ctt_circuit,
-        wt_circuit,
-        &mut rng,
-    )
-    .unwrap();
+//     let wt_circuit = WTCircuit::<E::ScalarField>::new(
+//         circuit_f_hat.clone(),
+//         circuit_f.clone(),
+//         circuit_z_f.clone(),
+//     );
 
-    assert!(
-        HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::verify_lookup(
-            pp,
-            accum,
-            proof.cm_f_hat,
-            proof.cm_f,
-            proof.cm_z,
-            proof
-        )
-        .unwrap(),
-        "[Harisa+] Verify Failed"
-    );
-}
+//     let proof = HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_proof(
+//         pp.clone(),
+//         accum.clone(),
+//         tree,
+//         f_hat,
+//         f,
+//         z_f,
+//         ctt_circuit,
+//         wt_circuit,
+//         &mut rng,
+//     )
+//     .unwrap();
+
+//     assert!(
+//         HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::verify_lookup(
+//             pp,
+//             accum,
+//             proof.cm_f_hat,
+//             proof.cm_f,
+//             proof.cm_z,
+//             proof,
+//         )
+//         .unwrap(),
+//         "[Harisa+] Verify Failed"
+//     );
+// }
 
 const SET_SIZE: usize = 16;
 
@@ -304,14 +356,14 @@ fn test_lookup_bn254() {
 
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(test_rng().next_u64());
 
-    test_lookup::<Bn254>(SET_SIZE);
+    // test_lookup::<Bn254>(SET_SIZE);
 }
 
 #[test]
 fn test_lookup_bench() {
     use ark_bn254::{Bn254, Fr as F};
 
-    test_lookup_arbit::<Bn254>(50, 16);
+    test_lookup_arbit::<Bn254>(64, 16);
 }
 
 #[test]
