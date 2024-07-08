@@ -90,7 +90,6 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
     {
-        let harisa_prover = start_timer!(|| "Harisa::prove");
         // pstar
         let mut p_star = BigInt::one();
 
@@ -130,10 +129,11 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
                 true => s *= p_i,
             };
         }
-
+        let w_hat_gen_prover = start_timer!(|| "W_hat Generation::prove");
         // calculate w_hat
         let w_hat = w.modpow(&s_bar, &pp.mod_n.clone());
-
+        end_timer!(w_hat_gen_prover);
+        let poke_prover = start_timer!(|| "PoKE::prove");
         // sample r
         let base_2: BigInt = BigInt::from(2);
         let r_len: u16 = 256;
@@ -151,11 +151,10 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         // calculate k
         let k = r_rand.clone() + u_star.clone() * s.clone() * h.clone();
 
+        
         // PoKE => prf1
         let large_b =
             (accum_hat.modpow(&h.clone(), &pp.mod_n.clone()) * r.clone()) % pp.mod_n.clone();
-
-        let poke_prove = start_timer!(|| "PoKE::prove");
 
         let l = hash_to_prime(w_hat.clone(), large_b.clone(), &constants);
 
@@ -164,7 +163,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         // let rem = k.clone() % l.clone();
         let q = w_hat.clone().modpow(&quot.clone(), &pp.mod_n.clone());
 
-        end_timer!(poke_prove);
+        end_timer!(poke_prover);
 
         let mut circuit_u = Vec::new();
 
@@ -257,7 +256,6 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         // %%%%%%%%%%%%%%%%%%%%%%%%%%% Remove Bound Circuit %%%%%%%%%%%%%%%%%%%%%%%%%%%
         // bound => prf3
        
-        end_timer!(harisa_prover);
 
         Ok(HarisaProof {
             cm_u,
@@ -290,6 +288,8 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
     where
         <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
     {
+        let harisa_prover = start_timer!(|| "Harisa::prove");
+        let w_gen_prover = start_timer!(|| "W Generation::prove");
         let mut w: Vec<BigInt> = Vec::new();
 
         let u_len = u.len();
@@ -317,11 +317,13 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
             w.truncate(w_len);
             u_vec.truncate(w_len);
         }
-
+        end_timer!(w_gen_prover);
         let w_u = w.first().unwrap();
         
         
+        
         let proof = Self::generate_harisa_proof(pp, accum, w_u.clone(), cm_u, u, o_u, rng).unwrap();
+        end_timer!(harisa_prover);
         
         Ok(proof)
         

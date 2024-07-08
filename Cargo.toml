@@ -48,6 +48,7 @@ num-primes = "0.3.0"
 rsa = "0.6"
 rand = "0.8"
 criterion = "0.3"
+structopt = "0.3"
 
 [features]
 default = ["parallel"]

@@ -5,7 +5,7 @@ pub mod prover;
 pub mod setup;
 pub mod verifier;
 
-mod test;
+pub mod test;
 
 pub mod copy_this_or_that;
 pub mod well_transformed;

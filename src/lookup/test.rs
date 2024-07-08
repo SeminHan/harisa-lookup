@@ -23,23 +23,22 @@ use num_bigint::BigInt;
 // use rand_core::{RngCore, SeedableRng};
 use rand::thread_rng;
 
-fn rand_setgen(n: usize, low: u32, high: u32) -> Vec<BigInt> {
+fn rand_setgen(n: u32, low: u32, high: u32) -> Vec<BigInt> {
     let mut rand_set: Vec<BigInt> = Vec::new();
     let base_2: i32 = 2;
     let mut rng = thread_rng();
 
-    for i in 0..n { 
+    let set_size = base_2.pow(n.try_into().unwrap());
+
+    for i in 0..set_size { 
         let mut tmp_elem = BigInt::from(rng.gen_range(base_2.pow(low)..base_2.pow(high)));
-        if primality_test(&tmp_elem, 10) {
-            tmp_elem <<= 1;
-        }
-        rand_set.push(tmp_elem);
+        rand_set.push(tmp_elem * 2);
     }
 
     rand_set
 }
 
-fn lookup_setgen(n: usize, set: Vec<BigInt>) -> (Vec<BigInt>, Vec<BigInt>) {
+fn lookup_setgen(set: Vec<BigInt>) -> (Vec<BigInt>, Vec<BigInt>) {
     use crate::harisa::hash_to_prime::hash_to_prime;
     use rand::thread_rng;
     let base_2: i32 = 2;
@@ -70,7 +69,7 @@ fn lookup_setgen(n: usize, set: Vec<BigInt>) -> (Vec<BigInt>, Vec<BigInt>) {
 }
 
 
-fn test_lookup_arbit<E: Pairing>(set_size: usize, batch_size: usize) 
+pub fn test_lookup_arbit<E: Pairing>(set_size: u32, batch_size: usize) 
 where
     <<E as Pairing>::ScalarField as FromStr>::Err: core::fmt::Debug,
 {
@@ -80,7 +79,7 @@ where
 
     table = rand_setgen(set_size.clone(), 8, 16); // Before Transformation
 
-    (prime_table, z_table) = lookup_setgen(set_size.clone(), table.clone()); // \hat{f}, z
+    (prime_table, z_table) = lookup_setgen(table.clone()); // \hat{f}, z
 
     let mut vec_table: Vec<(BigInt, BigInt, BigInt)> = prime_table.iter().cloned().zip(table.iter().cloned()).zip(z_table.iter().cloned()).map(|((x, y), z)| (x, y, z)).collect();
     vec_table.sort();
@@ -363,21 +362,21 @@ fn test_lookup_bn254() {
 fn test_lookup_bench() {
     use ark_bn254::{Bn254, Fr as F};
 
-    test_lookup_arbit::<Bn254>(64, 16);
+    test_lookup_arbit::<Bn254>(11, 512);
 }
-
+ 
 #[test]
 fn test_lookup_gen() {
     let mut table = Vec::new();
     let mut prime_table = Vec::new();
     let mut z_table = Vec::new();
     
-    let set_size = 10; // N(Table size)
+    let set_size = 8; // 2^N(Table size)
     let low = 8; // Random set element range from 2^low
     let high = 16; // Random set element range to 2^high
     table = rand_setgen(set_size.clone(), low.clone(), high.clone()); // Berfore transformation
     
-    (prime_table, z_table) = lookup_setgen(set_size.clone(), table.clone());
+    (prime_table, z_table) = lookup_setgen(table.clone());
 
     // %%%%%%%%%%%%%%%%%%%%%%%% For Debug %%%%%%%%%%%%%%%%%%%%%%%%
     // for i in 0..set_size.clone() { 
