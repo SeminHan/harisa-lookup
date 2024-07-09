@@ -77,9 +77,13 @@ where
 
     let (mut table, mut prime_table, mut z_table) = (Vec::new(), Vec::new(), Vec::new());
 
+    let table_gen = start_timer!(|| "Table Generation(Original ones)::setup");
     table = rand_setgen(set_size.clone(), 8, 16); // Before Transformation
+    end_timer!(table_gen);
 
+    let table_transform = start_timer!(|| "Table Transformation(to be prime)::setup");
     (prime_table, z_table) = lookup_setgen(table.clone()); // \hat{f}, z
+    end_timer!(table_transform);
 
     let mut vec_table: Vec<(BigInt, BigInt, BigInt)> = prime_table.iter().cloned().zip(table.iter().cloned()).zip(z_table.iter().cloned()).map(|((x, y), z)| (x, y, z)).collect();
     vec_table.sort();
@@ -167,8 +171,10 @@ where
 
     // set_table.extend(small_prime.clone());    
     let mut prod_set: BigInt = set_table.clone().iter().product();
-
+    
+    let acc_gen = start_timer!(|| "Accumulator Gen::acc");
     let accum = tree[0].clone().modpow(&set_table[0].clone(), &pp.m_pp.mod_n);
+    end_timer!(acc_gen);
 
     let mut circuit_hat_f: Vec<E::ScalarField> = Vec::new();
     let mut circuit_t: Vec<E::ScalarField> = Vec::new();
@@ -362,7 +368,7 @@ fn test_lookup_bn254() {
 fn test_lookup_bench() {
     use ark_bn254::{Bn254, Fr as F};
 
-    test_lookup_arbit::<Bn254>(11, 512);
+    test_lookup_arbit::<Bn254>(11, 1024);
 }
  
 #[test]

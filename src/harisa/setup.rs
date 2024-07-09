@@ -85,6 +85,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         )
         .unwrap();
         end_timer!(arithm_generation);
+        end_timer!(harisa_generation);
 
         // %%%%%%%%%%%%%%%%%%%%%%%%%%% Remove Bound Circuit %%%%%%%%%%%%%%%%%%%%%%%%%%%
         let bound_generation = start_timer!(|| "bound::generator");
@@ -100,7 +101,7 @@ impl<E: Pairing, LNK: Linker<E>, QAP: R1CSToQAP> Harisa<E, LNK, QAP> {
         .unwrap();
         end_timer!(bound_generation);
 
-        end_timer!(harisa_generation);
+        
 
         let (g, mod_n) = rsa_setup();
 
