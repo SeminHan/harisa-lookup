@@ -1,4 +1,4 @@
-use std::{str::FromStr, ops::Bound};
+use std::{str::FromStr, ops::Bound, mem};
 
 use crate::{
     harisa::{
@@ -9,7 +9,7 @@ use crate::{
     lookup::{
         constants::PRIME, copy_this_or_that::CTTCircuit, lookup::HarisaPlus,
         well_transformed::WTCircuit, self,
-    },
+    }, PEAK_ALLOC,
 };
 
 use ark_ec::{pairing::Pairing, ScalarMul};
@@ -80,7 +80,6 @@ where
     let table_gen = start_timer!(|| "Table Generation(Original ones)::setup");
     table = rand_setgen(set_size.clone(), 8, 16); // Before Transformation
     end_timer!(table_gen);
-
     let table_transform = start_timer!(|| "Table Transformation(to be prime)::setup");
     (prime_table, z_table) = lookup_setgen(table.clone()); // \hat{f}, z
     end_timer!(table_transform);
@@ -159,7 +158,8 @@ where
 
     // set_table.sort();
     
-
+    let cur_setup_mem = PEAK_ALLOC.current_usage_as_mb();
+    let peak_setup_mem = PEAK_ALLOC.peak_usage_as_mb();
     let (pp, tree) = HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_parameters(
         set_table.clone(),
         ctt_circuit,
@@ -168,6 +168,8 @@ where
         bound_circuit,
         &mut rng,
         ).unwrap();
+    println!("Memory Usage for Setup: {} MB", cur_setup_mem);
+    println!("Memory Usage for Setup: {} MB", peak_setup_mem);
 
     // set_table.extend(small_prime.clone());    
     let mut prod_set: BigInt = set_table.clone().iter().product();
@@ -201,6 +203,8 @@ where
         circuit_z_f.clone()
     );
 
+    let cur_prv_mem = PEAK_ALLOC.current_usage_as_mb();
+    let peak_prv_mem = PEAK_ALLOC.peak_usage_as_mb();
     let proof = HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::generate_lookup_proof(
         pp.clone(),
         accum.clone(),
@@ -212,8 +216,12 @@ where
         wt_circuit,
         &mut rng,
         non_proven_elem.clone()
-    ).unwrap();
+    ).unwrap();   
+    println!("Memory Usage for Proving: {} MB", cur_prv_mem);
+    println!("Memory Usage for Proving: {} MB", peak_prv_mem);
 
+    let cur_vfy_mem = PEAK_ALLOC.current_usage_as_mb();
+    let peak_vfy_mem = PEAK_ALLOC.peak_usage_as_mb();
     assert!(
         HarisaPlus::<E, Harisa<E, LinkSnark<E>>, LinkSnark<E>>::verify_lookup(
             pp,
@@ -225,6 +233,10 @@ where
         ).unwrap(),
         "[Harisa+] Verification Failed"
     );
+    println!("Memory Usage for Verification: {} MB", cur_vfy_mem);
+    println!("Memory Usage for Verification: {} MB", peak_vfy_mem);
+    // let peak_mem = PEAK_ALLOC.peak_usage_as_mb();
+    // println!("The max amount that was used {} MB", peak_mem);
 }
 
 // fn test_lookup<E: Pairing>(l_size: usize)
@@ -368,7 +380,7 @@ fn test_lookup_bn254() {
 fn test_lookup_bench() {
     use ark_bn254::{Bn254, Fr as F};
 
-    test_lookup_arbit::<Bn254>(11, 1024);
+    test_lookup_arbit::<Bn254>(8, 1);
 }
  
 #[test]

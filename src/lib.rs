@@ -32,3 +32,10 @@ extern crate ark_std;
 extern crate derivative;
 
 pub use ark_std::{marker::PhantomData, vec::Vec};
+
+pub use peak_alloc::PeakAlloc;
+
+#[global_allocator]
+static PEAK_ALLOC: PeakAlloc = PeakAlloc;
+
+
