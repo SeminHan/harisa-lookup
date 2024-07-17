@@ -1,4 +1,4 @@
-use std::{str::FromStr, ops::Bound, mem};
+use std::{str::FromStr, ops::Bound, mem::{self, size_of}};
 
 use crate::{
     harisa::{
@@ -12,6 +12,7 @@ use crate::{
     }, PEAK_ALLOC,
 };
 
+// use ark_bls12_377::G1Affine;
 use ark_ec::{pairing::Pairing, ScalarMul};
 use ark_ff::PrimeField;
 use ark_std::{test_rng, One, Zero,
@@ -171,6 +172,7 @@ where
     println!("Memory Usage for Setup: {} MB", cur_setup_mem);
     println!("Memory Usage for Setup: {} MB", peak_setup_mem);
 
+
     // set_table.extend(small_prime.clone());    
     let mut prod_set: BigInt = set_table.clone().iter().product();
     
@@ -202,6 +204,66 @@ where
         circuit_t.clone(),
         circuit_z_f.clone()
     );
+
+     // measure crs size(1): arithm_ek
+     let mut crs_size = 0;
+     crs_size += std::mem::size_of::<E::G1Affine>(); // beta
+     crs_size += std::mem::size_of::<E::G1Affine>(); // delta
+     
+    crs_size += pp.m_pp.arithm_ek.a_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // a_query
+    crs_size += pp.m_pp.arithm_ek.b_g1_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // b_i over G1
+    crs_size += pp.m_pp.arithm_ek.b_g2_query.clone().len() * std::mem::size_of::<E::G2Affine>(); // b_2 over G2
+    crs_size += pp.m_pp.arithm_ek.h_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // h_i over G1
+    crs_size += pp.m_pp.arithm_ek.l_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // l_i over G1
+     
+    crs_size += pp.m_pp.arithm_ek.ck.clone().len() * std::mem::size_of::<E::G1Affine>(); // commit key in arithm
+ 
+    // measure crs size(1): arith_vk
+    crs_size += std::mem::size_of::<E::G1Affine>(); // alpha
+    crs_size += std::mem::size_of::<E::G2Affine>(); // beta
+    crs_size += std::mem::size_of::<E::G2Affine>(); // gamma
+    crs_size += std::mem::size_of::<E::G2Affine>(); // delta
+    crs_size += std::mem::size_of::<E::G1Affine>(); // gamma inverse MUL abc
+ 
+    // measure crs size(1): linker-pp
+    crs_size +=  std::mem::size_of::<E::G1>(); // g_1
+    crs_size +=  std::mem::size_of::<E::G2>(); // g_2
+ 
+    // measure crs size(1): linker-pk
+    crs_size += pp.m_pp.arithm_lnk_ek.p.clone().len() * std::mem::size_of::<E::G1>(); // \vec p
+     
+    // measure crs size(1): linker-vk
+    crs_size += (pp.m_pp.arithm_lnk_vk.c.clone().len() + 1) * std::mem::size_of::<E::G2>(); // \vec c + a
+ 
+    // measure crs size(1): RSA
+    crs_size += std::mem::size_of::<BigInt>(); // g
+    crs_size += std::mem::size_of::<BigInt>(); // N
+
+    println!("%%%%%%%%%%%%% CRS size(Harisa): {}-bit %%%%%%%%%%%%%", crs_size);
+
+    // measure crs size(2): pk
+    crs_size += pp.ctt_ek.a_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // a_query
+    crs_size += pp.ctt_ek.b_g1_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // b_i over G1
+    crs_size += pp.ctt_ek.b_g2_query.clone().len() * std::mem::size_of::<E::G2Affine>(); // b_2 over G2
+    crs_size += pp.ctt_ek.h_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // h_i over G1
+    crs_size += pp.ctt_ek.l_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // l_i over G1
+
+    crs_size += pp.wt_ek.a_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // a_query
+    crs_size += pp.wt_ek.b_g1_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // b_i over G1
+    crs_size += pp.wt_ek.b_g2_query.clone().len() * std::mem::size_of::<E::G2Affine>(); // b_2 over G2
+    crs_size += pp.wt_ek.h_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // h_i over G1
+    crs_size += pp.wt_ek.l_query.clone().len() * std::mem::size_of::<E::G1Affine>(); // l_i over G1
+
+    // measure crs size(2): linker-pk; linker-pp and vk can be shared among relations
+    crs_size += pp.ctt_lnk_ek.p.clone().len() * std::mem::size_of::<E::G1>(); // \vec p
+    crs_size += pp.wt_lnk_ek.p.clone().len() * std::mem::size_of::<E::G1>(); // \vec p
+     
+    // measure crs size(1): linker-vk
+    crs_size += (pp.ctt_lnk_vk.c.clone().len() + 1) * std::mem::size_of::<E::G2>(); // \vec c + a
+    crs_size += (pp.wt_lnk_vk.c.clone().len() + 1) * std::mem::size_of::<E::G2>(); // \vec c + a
+
+    
+    println!("%%%%%%%%%%%%% CRS size(Harisa+): {}-bit %%%%%%%%%%%%%", crs_size);
 
     let cur_prv_mem = PEAK_ALLOC.current_usage_as_mb();
     let peak_prv_mem = PEAK_ALLOC.peak_usage_as_mb();
@@ -380,7 +442,7 @@ fn test_lookup_bn254() {
 fn test_lookup_bench() {
     use ark_bn254::{Bn254, Fr as F};
 
-    test_lookup_arbit::<Bn254>(8, 1);
+    test_lookup_arbit::<Bn254>(10, 256);
 }
  
 #[test]
